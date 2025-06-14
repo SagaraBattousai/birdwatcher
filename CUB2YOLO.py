@@ -1,5 +1,6 @@
 import sys
 import os
+from collections.abc import Callable
 
 from PIL import Image
 
@@ -21,45 +22,52 @@ def getClassMap(mapfile: str) -> dict[str, int]:
             line = mf.readline()
     return classmap
 
-
-# ANSWER = ((121, 'Parakeet_Auklet_0032_795986.jpg'), (120, 'Pomarine_Jaeger_0007_795764.jpg'))
-def getMinImageDimensions(
-    images_root_dir: str,
-) -> tuple[tuple[int, str], tuple[int, str]]:
-    minWidth = (65535, "")
-    minHeight = (65535, "")
-
+# could make into a decorator to "?potentially?" remove nonlocal declarations
+def for_all_images(func: Callable[[Image.Image, str], None], images_root_dir: str):
     for dirpath, _, filenames in os.walk(images_root_dir):
         # As is the case of the root dir and theoretically any empty dirs
         if len(filenames) == 0:
             continue
-        for imagefile in filenames:
-            with Image.open(f"{dirpath}/{imagefile}") as image:
-                if image.width < minWidth[0]:
-                    # minWidth[0] = image.width
-                    # minWidth[1] = imagefile
-                    minWidth = (image.width, imagefile)
-                if image.height < minHeight[0]:
-                    minHeight = (image.height, imagefile)
+        for image_filename in filenames:
+            with Image.open(f"{dirpath}/{image_filename}") as image:
+                func(image, image_filename)
 
-    return (minWidth, minHeight)
+
+# ANSWER = ((121, 'Parakeet_Auklet_0032_795986.jpg'), (120, 'Pomarine_Jaeger_0007_795764.jpg'))
+def get_min_image_dimensions(
+    images_root_dir: str,
+) -> tuple[tuple[int, str], tuple[int, str]]:
+    min_width = (65535, "")
+    min_height = (65535, "")
+
+    def min_dims_func(image, image_filename):
+        nonlocal min_width
+        nonlocal min_height
+        if image.width < min_width[0]:
+            min_width = (image.width, image_filename)
+        if image.height < min_height[0]:
+            min_height = (image.height, image_filename)
+
+    for_all_images(min_dims_func, images_root_dir)
+
+    return (min_width, min_height)
 
 
 # ANSWER = (467.88683406854426, 386.02994570749917)
-def getAvgImageDimensions(images_root_dir: str) -> tuple[float, float]:
-    total_width = 0
-    total_height = 0
-    image_count = 0
+def get_avg_image_dimensions(images_root_dir: str) -> tuple[float, float]:
+    total_width = 0.0
+    total_height = 0.0
+    image_count = 0.0
 
-    for dirpath, _, filenames in os.walk(images_root_dir):
-        # As is the case of the root dir and theoretically any empty dirs
-        if len(filenames) == 0:
-            continue
-        for imagefile in filenames:
-            with Image.open(f"{dirpath}/{imagefile}") as image:
-                total_width += image.width
-                total_height += image.height
-                image_count += 1
+    def avg_dims_func(image, _):
+        nonlocal total_width
+        nonlocal total_height
+        nonlocal image_count
+        total_width += image.width
+        total_height += image.height
+        image_count += 1
+
+    for_all_images(avg_dims_func, images_root_dir)
 
     return (total_width / image_count, total_height / image_count)
 
@@ -77,20 +85,21 @@ def get_num_images_under_size(
     under_height_count = 0
     under_both_count = 0
 
-    for dirpath, _, filenames in os.walk(images_root_dir):
-        # As is the case of the root dir and theoretically any empty dirs
-        if len(filenames) == 0:
-            continue
-        for imagefile in filenames:
-            with Image.open(f"{dirpath}/{imagefile}") as image:
-                if image.width < min_width:
-                    under_width_count += 1
-                    if image.height < min_height:
-                        under_height_count += 1
-                        under_both_count += 1
-                        # could write continue but elif does that :)
-                elif image.height < min_height:
-                    under_height_count += 1
+    def num_under_func(image, _):
+        nonlocal under_width_count
+        nonlocal under_height_count
+        nonlocal under_both_count
+
+        if image.width < min_width:
+            under_width_count += 1
+            if image.height < min_height:
+                under_height_count += 1
+                under_both_count += 1
+                # could write continue but elif does that :)
+        elif image.height < min_height:
+            under_height_count += 1
+
+    for_all_images(num_under_func, images_root_dir)
 
     return (under_width_count, under_height_count, under_both_count)
 
@@ -99,16 +108,13 @@ if __name__ == "__main__":
     classmap = getClassMap(DS_ROOT + "/classes.txt")
     print(classmap)
 
-    # minDims = getMinImageDimensions(DS_ROOT + "/images")
-    # print(minDims)
+    # min_dims = get_min_image_dimensions(DS_ROOT + "/images")
+    # print(min_dims)
 
-    # avgDims = getAvgImageDimensions(DS_ROOT + "/images")
-    # print(avgDims)
+    avg_dims = get_avg_image_dimensions(DS_ROOT + "/images")
+    print(avg_dims)
 
-
-    under_448 = get_num_images_under_size(DS_ROOT + "/images", 448, 448)
-    print(under_448)
-
-
+    # under_448 = get_num_images_under_size(DS_ROOT + "/images", 448, 448)
+    # print(under_448)
 
     sys.exit(0)
