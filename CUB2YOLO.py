@@ -1,17 +1,22 @@
+""" Converter script from CUB into YOLO format """
 import sys
 import os
 from collections.abc import Callable
 
+# from typing import TypeVar
+
 from PIL import Image
+
+# _T = TypeVar("_T")
 
 DS_ROOT: str = "CUB_200_2011_YOLO"
 
 
 # Usually want to convert the otherway around (like for translating a prediction)
 # However as this is for converting the dataset we want it this way around
-def getClassMap(mapfile: str) -> dict[str, int]:
+def get_class_map(mapfile: str) -> dict[str, int]:
     classmap = {}
-    with open(mapfile, "rt") as mf:
+    with open(mapfile, "rt", encoding="utf-8") as mf:
         line = mf.readline()
         while line != "":
             # Could try catch to enforce format of mapfile but for now....
@@ -21,6 +26,7 @@ def getClassMap(mapfile: str) -> dict[str, int]:
             classmap[class_name[4:-1]] = int(class_index) - 1
             line = mf.readline()
     return classmap
+
 
 # could make into a decorator to "?potentially?" remove nonlocal declarations
 def for_all_images(func: Callable[[Image.Image, str], None], images_root_dir: str):
@@ -33,24 +39,43 @@ def for_all_images(func: Callable[[Image.Image, str], None], images_root_dir: st
                 func(image, image_filename)
 
 
+def get_limits_image_dimensions(
+    images_root_dir: str,
+    # comp_func: Callable[[_T, _T], bool],
+    comp_func: Callable[[int, int], bool],
+    init_width: int,
+    init_height: int,
+) -> tuple[tuple[int, str], tuple[int, str]]:
+    limit_width = (init_width, "")
+    limit_height = (init_height, "")
+
+    def limits_dims_func(image, image_filename):
+        nonlocal limit_width
+        nonlocal limit_height
+        if comp_func(image.width, limit_width[0]):
+            limit_width = (image.width, image_filename)
+        if comp_func(image.height, limit_height[0]):
+            limit_height = (image.height, image_filename)
+
+    for_all_images(limits_dims_func, images_root_dir)
+
+    return (limit_width, limit_height)
+
+
 # ANSWER = ((121, 'Parakeet_Auklet_0032_795986.jpg'), (120, 'Pomarine_Jaeger_0007_795764.jpg'))
 def get_min_image_dimensions(
     images_root_dir: str,
 ) -> tuple[tuple[int, str], tuple[int, str]]:
-    min_width = (65535, "")
-    min_height = (65535, "")
+    return get_limits_image_dimensions(
+        images_root_dir, (lambda a, b: a < b), 65535, 65535
+    )
 
-    def min_dims_func(image, image_filename):
-        nonlocal min_width
-        nonlocal min_height
-        if image.width < min_width[0]:
-            min_width = (image.width, image_filename)
-        if image.height < min_height[0]:
-            min_height = (image.height, image_filename)
 
-    for_all_images(min_dims_func, images_root_dir)
-
-    return (min_width, min_height)
+# ANSWER = ((500, 'Hooded_Oriole_0029_90485.jpg'), (500, 'Hooded_Oriole_0091_90821.jpg'))
+def get_max_image_dimensions(
+    images_root_dir: str,
+) -> tuple[tuple[int, str], tuple[int, str]]:
+    return get_limits_image_dimensions(images_root_dir, (lambda a, b: a > b), -1, -1)
 
 
 # ANSWER = (467.88683406854426, 386.02994570749917)
@@ -104,17 +129,49 @@ def get_num_images_under_size(
     return (under_width_count, under_height_count, under_both_count)
 
 
-if __name__ == "__main__":
-    classmap = getClassMap(DS_ROOT + "/classes.txt")
+def resize_retaining_aspect(image: Image.Image, size: int) -> Image.Image:
+    # For now seems best for increase and decrease
+    resampling_filter = Image.Resampling.BICUBIC
+    scale = size / max(image.width, image.height)
+
+    return image.resize(
+        (int(image.width * scale), int(image.height * scale)),
+        resample=resampling_filter,
+    )
+
+
+def main() -> int:
+    classmap = get_class_map(DS_ROOT + "/classes.txt")
     print(classmap)
 
     # min_dims = get_min_image_dimensions(DS_ROOT + "/images")
     # print(min_dims)
 
-    avg_dims = get_avg_image_dimensions(DS_ROOT + "/images")
-    print(avg_dims)
+    # max_dims = get_max_image_dimensions(DS_ROOT + "/images")
+    # print(max_dims)
+
+    # avg_dims = get_avg_image_dimensions(DS_ROOT + "/images")
+    # print(avg_dims)
 
     # under_448 = get_num_images_under_size(DS_ROOT + "/images", 448, 448)
     # print(under_448)
 
-    sys.exit(0)
+    min_image = Image.open(
+        "CUB_200_2011_YOLO/images/007.Parakeet_Auklet/Parakeet_Auklet_0032_795986.jpg"
+    )
+
+    max_image = Image.open(
+        "CUB_200_2011_YOLO/images/096.Hooded_Oriole/Hooded_Oriole_0091_90821.jpg"
+    )
+
+    i1 = resize_retaining_aspect(min_image, 224)
+    i2 = resize_retaining_aspect(max_image, 224)
+
+    print(i1.width, i1.height)
+    print(i2.width, i2.height)
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
