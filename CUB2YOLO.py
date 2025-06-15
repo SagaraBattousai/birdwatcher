@@ -6,6 +6,9 @@ from collections.abc import Callable
 # from typing import TypeVar
 
 from PIL import Image
+from PIL import ImageOps
+
+import matplotlib.pyplot as plt
 
 # _T = TypeVar("_T")
 
@@ -132,17 +135,30 @@ def get_num_images_under_size(
 def resize_retaining_aspect(image: Image.Image, size: int) -> Image.Image:
     # For now seems best for increase and decrease
     resampling_filter = Image.Resampling.BICUBIC
-    scale = size / max(image.width, image.height)
 
-    return image.resize(
-        (int(image.width * scale), int(image.height * scale)),
-        resample=resampling_filter,
-    )
+    # could use ImageOps.scale but contain could be cleaverer under the hood.
+    return ImageOps.contain(image, size=(size, size), method=resampling_filter)
+
+
+def resize_and_pad(
+    image: Image.Image,
+    size: int | tuple[int, int],
+    color: str | int | tuple[int, ...] | None = None,
+) -> Image.Image:
+    
+    if isinstance(size, int):
+        size = (size, size)
+
+    # For now seems best for increase and decrease
+    resampling_filter = Image.Resampling.BICUBIC
+
+    # Turns out this function does everythin automagically how fortunate
+    return ImageOps.pad(image, size=size, method=resampling_filter, color=color)
 
 
 def main() -> int:
-    classmap = get_class_map(DS_ROOT + "/classes.txt")
-    print(classmap)
+    # classmap = get_class_map(DS_ROOT + "/classes.txt")
+    # print(classmap)
 
     # min_dims = get_min_image_dimensions(DS_ROOT + "/images")
     # print(min_dims)
@@ -169,6 +185,18 @@ def main() -> int:
 
     print(i1.width, i1.height)
     print(i2.width, i2.height)
+
+    ip1 = resize_and_pad(min_image, 224)
+    ip2 = resize_and_pad(max_image, 224)
+
+    print(ip1.width, ip1.height)
+    print(ip2.width, ip2.height)
+
+    plt.imshow(i2)
+    plt.show()
+
+    plt.imshow(ip2)
+    plt.show()
 
     return 0
 
